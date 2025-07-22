@@ -99,6 +99,7 @@ async def add_forward(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
         bot.remove_handler(FORWARD_HANDLER)
         PARSED_CONFIG.clear()
         new_config = get_config()
+        from telegram.ext import MessageHandler
         bot.add_handler(MessageHandler(
             filters.Chat([config.source.get_id() for config in new_config])
             & ~filters.COMMAND
@@ -140,6 +141,7 @@ async def del_forward(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
         bot.remove_handler(FORWARD_HANDLER)
         PARSED_CONFIG.clear()
         new_config = get_config()
+        from telegram.ext import MessageHandler
         bot.add_handler(MessageHandler(
             filters.Chat([config.source.get_id() for config in new_config])
             & ~filters.COMMAND
