@@ -1,6 +1,13 @@
 from functools import wraps
-from telegram import Update
-from telegram.ext import CommandHandler, ContextTypes, filters
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram.ext import (
+    CommandHandler,
+    ContextTypes,
+    filters,
+    CallbackQueryHandler,
+    ConversationHandler,
+    MessageHandler,
+)
 
 from forwarder import bot, OWNER_ID
 from forwarder.config import ADMINS
@@ -144,12 +151,150 @@ async def del_forward(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
         await update.message.reply_text("Invalid chat ID.")
 
 
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    keyboard = [
+        [InlineKeyboardButton("Add Forward", callback_data="add_forward")],
+        [InlineKeyboardButton("Delete Forward", callback_data="del_forward")],
+        [InlineKeyboardButton("List Forwards", callback_data="list_forwards")],
+    ]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    await update.message.reply_text("Please choose an option:", reply_markup=reply_markup)
+
+
+async def button(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    query = update.callback_query
+    await query.answer()
+    if query.data == "add_forward":
+        await query.message.reply_text("Please send me the source chat ID.")
+        return 1
+    elif query.data == "del_forward":
+        await query.message.reply_text("Please send me the source chat ID of the forward rule to delete.")
+        return 3
+    elif query.data == "list_forwards":
+        config = get_config()
+        if not config:
+            await query.message.reply_text("No forwarding rules have been set.")
+            return ConversationHandler.END
+
+        message = "Here are the current forwarding rules:\n\n"
+        for forward_config in config:
+            message += f"Source: {forward_config.source.__repr__()}\n"
+            message += "Destinations:\n"
+            for dest in forward_config.destination:
+                message += f"- {dest.__repr__()}\n"
+            message += "\n"
+
+        await query.message.reply_text(message)
+        return ConversationHandler.END
+
+
+async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    await update.message.reply_text("Operation cancelled.")
+    return ConversationHandler.END
+
+
+async def get_source(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    context.user_data["source_id"] = update.message.text
+    await update.message.reply_text("Please send me the destination chat ID.")
+    return 2
+
+
+async def get_destination(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    context.user_data["dest_id"] = update.message.text
+
+    source_id = context.user_data["source_id"]
+    dest_id = context.user_data["dest_id"]
+
+    config = get_config()
+
+    # Check if the source already exists
+    for forward_config in config:
+        if forward_config.source.__repr__() == source_id:
+            forward_config.destination.append(dest_id)
+            break
+    else:
+        # If source doesn't exist, create a new ForwardConfig
+        new_config = ForwardConfig(source_id, [dest_id])
+        config.append(new_config)
+
+    save_config(config)
+    await update.message.reply_text(f"Forward rule from {source_id} to {dest_id} has been added.")
+
+    # Reload the forwarder
+    bot.remove_handler(FORWARD_HANDLER)
+    PARSED_CONFIG.clear()
+    new_config = get_config()
+    bot.add_handler(MessageHandler(
+        filters.Chat([config.source.get_id() for config in new_config])
+        & ~filters.COMMAND
+        & ~filters.StatusUpdate.ALL,
+        forwarder,
+    ))
+
+    return ConversationHandler.END
+
+
+async def get_source_to_delete(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    context.user_data["source_id_to_delete"] = update.message.text
+    await update.message.reply_text("Please send me the destination chat ID to delete.")
+    return 4
+
+
+async def get_destination_to_delete(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    context.user_data["dest_id_to_delete"] = update.message.text
+
+    source_id = context.user_data["source_id_to_delete"]
+    dest_id = context.user_data["dest_id_to_delete"]
+
+    config = get_config()
+
+    for forward_config in config:
+        if forward_config.source.__repr__() == source_id:
+            for destination in forward_config.destination:
+                if destination.__repr__() == dest_id:
+                    forward_config.destination.remove(destination)
+                    if not forward_config.destination:
+                        config.remove(forward_config)
+                    break
+            break
+
+    save_config(config)
+    await update.message.reply_text(f"Forward rule from {source_id} to {dest_id} has been deleted.")
+
+    # Reload the forwarder
+    bot.remove_handler(FORWARD_HANDLER)
+    PARSED_CONFIG.clear()
+    new_config = get_config()
+    bot.add_handler(MessageHandler(
+        filters.Chat([config.source.get_id() for config in new_config])
+        & ~filters.COMMAND
+        & ~filters.StatusUpdate.ALL,
+        forwarder,
+    ))
+
+    return ConversationHandler.END
+
+
 ADD_ADMIN_HANDLER = CommandHandler("addadmin", add_admin)
 DEL_ADMIN_HANDLER = CommandHandler("deladmin", del_admin)
 ADD_FORWARD_HANDLER = CommandHandler("addforward", add_forward)
 DEL_FORWARD_HANDLER = CommandHandler("delforward", del_forward)
+START_HANDLER = CommandHandler("start", start)
+
+CONVERSATION_HANDLER = ConversationHandler(
+    entry_points=[CallbackQueryHandler(button)],
+    states={
+        1: [MessageHandler(filters.TEXT & ~filters.COMMAND, get_source)],
+        2: [MessageHandler(filters.TEXT & ~filters.COMMAND, get_destination)],
+        3: [MessageHandler(filters.TEXT & ~filters.COMMAND, get_source_to_delete)],
+        4: [MessageHandler(filters.TEXT & ~filters.COMMAND, get_destination_to_delete)],
+    },
+    fallbacks=[CommandHandler("cancel", cancel)],
+)
 
 bot.add_handler(ADD_ADMIN_HANDLER)
 bot.add_handler(DEL_ADMIN_HANDLER)
 bot.add_handler(ADD_FORWARD_HANDLER)
 bot.add_handler(DEL_FORWARD_HANDLER)
+bot.add_handler(START_HANDLER)
+bot.add_handler(CONVERSATION_HANDLER)
