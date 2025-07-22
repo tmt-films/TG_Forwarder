@@ -53,7 +53,7 @@ async def forwarder(update: Update, _: ContextTypes.DEFAULT_TYPE) -> None:
 
 
 FORWARD_HANDLER = MessageHandler(
-    filters.Chat([config.source.get_id() for config in get_config()])
+    filters.Chat([source.get_id() for config in get_config() for source in config.source])
     & ~filters.COMMAND
     & ~filters.StatusUpdate.ALL,
     forwarder,

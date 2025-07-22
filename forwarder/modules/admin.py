@@ -101,7 +101,7 @@ async def add_forward(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
         new_config = get_config()
         from telegram.ext import MessageHandler
         bot.add_handler(MessageHandler(
-            filters.Chat([config.source.get_id() for config in new_config])
+            filters.Chat([source.get_id() for config in new_config for source in config.source])
             & ~filters.COMMAND
             & ~filters.StatusUpdate.ALL,
             forwarder,
@@ -143,7 +143,7 @@ async def del_forward(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
         new_config = get_config()
         from telegram.ext import MessageHandler
         bot.add_handler(MessageHandler(
-            filters.Chat([config.source.get_id() for config in new_config])
+            filters.Chat([source.get_id() for config in new_config for source in config.source])
             & ~filters.COMMAND
             & ~filters.StatusUpdate.ALL,
             forwarder,
@@ -306,35 +306,18 @@ async def get_blacklist(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
 
 
 async def save_forward_rule(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    source_id = context.user_data["source_id"]
-    dest_id = context.user_data["dest_id"]
+    source_ids = context.user_data["source_id"]
+    dest_ids = context.user_data["dest_id"]
     filters = context.user_data["filters"]
     blacklist = context.user_data["blacklist"]
 
     config = get_config()
 
-    # Check if the source already exists
-    for forward_config in config:
-        if forward_config.source.__repr__() == source_id:
-            forward_config.destination.append(dest_id)
-            if filters:
-                if forward_config.filters:
-                    forward_config.filters.extend(filters)
-                else:
-                    forward_config.filters = filters
-            if blacklist:
-                if forward_config.blacklist:
-                    forward_config.blacklist.extend(blacklist)
-                else:
-                    forward_config.blacklist = blacklist
-            break
-    else:
-        # If source doesn't exist, create a new ForwardConfig
-        new_config = ForwardConfig(source_id, [dest_id], filters, blacklist)
-        config.append(new_config)
+    new_config = ForwardConfig(source_ids, dest_ids, filters, blacklist)
+    config.append(new_config)
 
     save_config(config)
-    await update.message.reply_text(f"Forward rule from {source_id} to {dest_id} has been added.")
+    await update.message.reply_text(f"Forward rule from {source_ids} to {dest_ids} has been added.")
 
     # Reload the forwarder
     bot.remove_handler(FORWARD_HANDLER)
@@ -342,7 +325,7 @@ async def save_forward_rule(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     new_config = get_config()
     from telegram.ext import MessageHandler
     bot.add_handler(MessageHandler(
-        filters.Chat([config.source.get_id() for config in new_config])
+        filters.Chat([source.get_id() for config in new_config for source in config.source])
         & ~filters.COMMAND
         & ~filters.StatusUpdate.ALL,
         forwarder,
