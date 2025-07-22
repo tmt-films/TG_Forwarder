@@ -223,7 +223,7 @@ async def get_source_to_delete(update: Update, context: ContextTypes.DEFAULT_TYP
     return 4
 
 
-async def get_destination_to_delete(update: Update, context: ContextTypes.DEFAULT_T) -> int:
+async def get_destination_to_delete(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     context.user_data["dest_id_to_delete"] = [
         item.strip() for item in update.message.text.split(",")
     ]
