@@ -1,9 +1,10 @@
-from typing import List, List, Union, Optional
+import json
+from typing import List, Union, Optional
 
-from forwarder import CONFIG
+from forwarder import CONFIG, config_name
 
 
-PARSED_CONFIG = []
+PARSED_CONFIG: List["ForwardConfig"] = []
 
 
 class ChatConfig:
@@ -56,11 +57,30 @@ class ForwardConfig:
         self.filters = filters
         self.blacklist = blacklist
 
+    def to_dict(self):
+        data = {
+            "source": self.source.__repr__(),
+            "destination": [item.__repr__() for item in self.destination],
+        }
+        if self.filters:
+            data["filters"] = self.filters
+        if self.blacklist:
+            data["blacklist"] = self.blacklist
+        return data
+
+
+def save_config(config: List[ForwardConfig]):
+    with open(config_name, "w") as fp:
+        json.dump([item.to_dict() for item in config], fp, indent=4)
+
 
 def get_config() -> List[ForwardConfig]:
-    global PARSED_CONFIG
+    global PARSED_CONFIG, CONFIG
     if PARSED_CONFIG:
         return PARSED_CONFIG
+
+    with open(config_name, "r") as data:
+        CONFIG = json.load(data)
 
     PARSED_CONFIG = [
         ForwardConfig(
