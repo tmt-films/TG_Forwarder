@@ -40,26 +40,26 @@ class ChatConfig:
 
 
 class ForwardConfig:
-    source: ChatConfig
+    source: List[ChatConfig]
     destination: List[ChatConfig]
     filters: Optional[List[str]]
     blacklist: Optional[List[str]]
 
     def __init__(
         self,
-        source: Union[str, int],
+        source: List[Union[str, int]],
         destination: List[Union[str, int]],
         filters: Optional[List[str]] = None,
         blacklist: Optional[List[str]] = None,
     ):
-        self.source = ChatConfig(source)
+        self.source = [ChatConfig(item) for item in source]
         self.destination = [ChatConfig(item) for item in destination]
         self.filters = filters
         self.blacklist = blacklist
 
     def to_dict(self):
         data = {
-            "source": self.source.__repr__(),
+            "source": [item.__repr__() for item in self.source],
             "destination": [item.__repr__() for item in self.destination],
         }
         if self.filters:
@@ -105,6 +105,7 @@ def get_destination(chat_id: int, topic_id: Optional[int] = None) -> List[Forwar
     dest: List[ForwardConfig] = []
 
     for chat in get_config():
-        if chat.source.get_id() == chat_id and chat.source.get_topic() == topic_id:
-            dest.append(chat)
+        for source in chat.source:
+            if source.get_id() == chat_id and source.get_topic() == topic_id:
+                dest.append(chat)
     return dest
