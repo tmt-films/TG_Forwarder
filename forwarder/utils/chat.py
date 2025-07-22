@@ -36,7 +36,9 @@ class ChatConfig:
     def get_id(self) -> int:
         if isinstance(self.__chat, int):
             return self.__chat
-        return int(self.__chat.split("#")[0])
+        if self.is_topic:
+            return int(self.__chat.split("#")[0])
+        return int(self.__chat)
 
 
 class ForwardConfig:
